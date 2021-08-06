@@ -8,6 +8,9 @@
 %% @end
 %% ====================================================================
 
+-define(LINEAR_BACK_OFF_MILLIS, 1000).
+-define(MAX_RETRIES, 3).
+
 -define(MIME_AWS_JSON, "application/x-amz-json-1.0").
 -define(SCHEME, https).
 

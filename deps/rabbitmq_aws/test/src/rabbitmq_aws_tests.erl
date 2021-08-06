@@ -443,6 +443,46 @@ sign_headers_test_() ->
     ]
   }.
 
+api_get_request_with_retries_test_() ->
+  {
+    foreach,
+    fun () ->
+      meck:new(httpc, []),
+      meck:new(rabbitmq_aws_config, []),
+      [httpc, rabbitmq_aws_config]
+    end,
+    fun meck:unload/1,
+    [
+      {"AWS service API request failed - credentials",
+        fun() ->
+          meck:expect(rabbitmq_aws_config, credentials, 0, {error, undefined}),
+          {ok, Pid} = rabbitmq_aws:start_link(),
+          rabbitmq_aws:set_region("us-east-1"),
+          Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 4),
+          ok = gen_server:stop(Pid),
+          ?assertEqual({error, credentials}, Result)
+        end
+      },
+      {"AWS service API succeeds after error",
+        fun() ->
+          State = #state{access_key = "ExpiredKey",
+            secret_access_key = "ExpiredAccessKey",
+            region = "us-east-1",
+            expiration = {{3016, 4, 1}, {12, 0, 0}}},
+          meck:expect(httpc, request, 4, {error, "request timeout"}),
+          meck:expect(httpc, request, 4, {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}], "{\"data\": \"value\"}"}}),
+          {ok, Pid} = rabbitmq_aws:start_link(),
+          rabbitmq_aws:set_region("us-east-1"),
+          rabbitmq_aws:set_credentials(State),
+          Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 4),
+          ok = gen_server:stop(Pid),
+          ?assertEqual({ok, [{"data","value"}]}, Result),
+          meck:validate(httpc)
+        end
+      }
+    ]
+  }.
+
 api_get_request_test_() ->
   {
     foreach,
@@ -474,7 +514,7 @@ api_get_request_test_() ->
           meck:expect(rabbitmq_aws_config, credentials, 0, {error, undefined}),
           {ok, Pid} = rabbitmq_aws:start_link(),
           rabbitmq_aws:set_region("us-east-1"),
-          Result = rabbitmq_aws:api_get_request("AWS", "API"),
+          Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 4),
           ok = gen_server:stop(Pid),
           ?assertEqual({error, credentials}, Result)
         end
